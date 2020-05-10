@@ -14,14 +14,15 @@ class AlexNet(models.Sequential):
                                strides=(4, 4), padding='valid',
                                activation='relu',
                                input_shape=input_shape))
-        # should add some normalization
+        # Local Normalization layer
+        self.add(LRN())
         self.add(layers.MaxPool2D(pool_size=(3, 3), strides=(2, 2),
                                   padding='valid'))
 
         self.add(layers.Conv2D(filters=256, kernel_size=(5, 5),
                                strides=(1, 1), padding='same',
                                activation='relu'))
-        # should add some normalization
+        self.add(LRN())
         self.add(layers.MaxPool2D(pool_size=(3, 3), strides=(2, 2),
                                   padding='valid'))
 
@@ -45,6 +46,32 @@ class AlexNet(models.Sequential):
         self.add(layers.Dense(classes, activation='softmax'))
 
 
+class LRN(layers.Layer):
+    """
+    custom layer, used to implement local response normalization,
+    as defined in the original alexnet paper
+    """
+    def __init__(self, alpha=0.0001,k=1,beta=0.75,n=5, **kwargs):
+        self.alpha = alpha
+        self.k = k
+        self.beta = beta
+        self.n = n
+        super(LRN, self).__init__(**kwargs)
+    
+    def call(self, x, mask=None):
+        return tf.nn.local_response_normalization(
+            x, depth_radius=self.n, bias=self.k,
+            alpha=self.alpha, beta=self.beta)
+
+    def get_config(self):
+        config = {"alpha": self.alpha,
+                  "k": self.k,
+                  "beta": self.beta,
+                  "n": self.n}
+        base_config = super(LRN, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+
 def loadBatch(filename):
     path = 'datasets/cifar10/'
     with open(path + filename, 'rb') as fo:
@@ -64,7 +91,7 @@ def resize(X_cifar):
     """
     rescale a cifar image to get an image of size 227*227*3
     """
-    X_cifar = X_cifar.reshape((len(dict[b'data']), 3, 32, 32)).transpose(0, 2, 3, 1)
+    X_cifar = X_cifar.reshape(np.size(X_cifar, 0), 3, 32, 32).transpose(0, 2, 3, 1)
     return tf.image.resize(X_cifar, [227, 227])
 
 
@@ -73,6 +100,17 @@ def main():
     Xtrain, Ytrain, ytrain = loadBatch('data_batch_1')
     Xval, Yval, yval = loadBatch('data_batch_2')
     Xtest, Ytest, ytest = loadBatch('test_batch')
+
+    # clip everything to run/check faster
+    Xtrain = Xtrain[:200, :]
+    Ytrain = Ytrain[:200, :]
+    ytrain = ytrain[:200]
+    Xval = Xval[:200, :]
+    Yval = Yval[:200, :]
+    yval = yval[:200]
+    Xtest = Xtest[:200, :]
+    Ytest = Ytest[:200, :]
+    ytest = ytest[:200]
 
     # normalize the data
     mean_train = np.mean(Xtrain, axis=0)
@@ -99,7 +137,9 @@ def main():
         loss='categorical_crossentropy',
         metrics=['accuracy'])
     history = model.fit(Xtrain, Ytrain, epochs=epochs,
-                        batch_size=n_batch)
+                        batch_size=n_batch,
+                        validation_data=(Xval, Yval))
+    
 
     # plots
     plt.plot(history.history['accuracy'], label='accuracy')
