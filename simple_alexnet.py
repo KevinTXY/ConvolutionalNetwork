@@ -61,7 +61,10 @@ def normalize(X, mean_train, std_train):
 
 
 def resize(X_cifar):
-    X_cifar.reshape((len(dict[b'data']), 3, 32, 32)).transpose(0, 2, 3, 1)
+    """
+    rescale a cifar image to get an image of size 227*227*3
+    """
+    X_cifar = X_cifar.reshape((len(dict[b'data']), 3, 32, 32)).transpose(0, 2, 3, 1)
     return tf.image.resize(X_cifar, [227, 227])
 
 
